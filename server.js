@@ -5,12 +5,23 @@ const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
 
-// Serve static HTML/CSS/JS from the public directory (or current directory)
+// Enable CORS for Socket.io
+const io = new Server(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"]
+  }
+});
+
+// Serve static HTML/CSS/JS from current folder
 app.use(express.static(path.join(__dirname)));
 
-// Store connected users and messages
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+// Store connected users
 const users = {};
 
 io.on('connection', (socket) => {
@@ -18,16 +29,20 @@ io.on('connection', (socket) => {
 
   // Handle user joining
   socket.on('join', (data) => {
-    users[socket.id] = { username: data.username, channel: data.channel || 'general' };
-    socket.join(users[socket.id].channel);
+    if (!data || !data.username) return;
+
+    const username = data.username.trim();
+    const channel = data.channel || 'general';
+
+    users[socket.id] = { username, channel };
+    socket.join(channel);
     
-    // Notify room that user connected
-    io.to(users[socket.id].channel).emit('system_message', {
-      text: `${data.username} has joined #${users[socket.id].channel}`
+    // Send system message
+    io.to(channel).emit('system_message', {
+      text: `${username} joined #${channel}`
     });
 
-    // Send active user list
-    updateUserList(users[socket.id].channel);
+    updateUserList(channel);
   });
 
   // Handle channel switching
@@ -39,7 +54,7 @@ io.on('connection', (socket) => {
     users[socket.id].channel = newChannel;
     socket.join(newChannel);
 
-    io.to(oldChannel).emit('system_message', { text: `${users[socket.id].username} left the channel.` });
+    io.to(oldChannel).emit('system_message', { text: `${users[socket.id].username} left #${oldChannel}` });
     io.to(newChannel).emit('system_message', { text: `${users[socket.id].username} joined #${newChannel}` });
 
     updateUserList(oldChannel);
@@ -49,10 +64,13 @@ io.on('connection', (socket) => {
   // Handle chat messages
   socket.on('chat_message', (msgData) => {
     const user = users[socket.id];
-    if (user) {
+    if (user && msgData && msgData.text) {
+      const trimmedText = msgData.text.trim();
+      if (trimmedText.length === 0) return;
+
       io.to(user.channel).emit('chat_message', {
         user: user.username,
-        text: msgData.text,
+        text: trimmedText,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       });
     }
@@ -62,9 +80,10 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     const user = users[socket.id];
     if (user) {
-      io.to(user.channel).emit('system_message', { text: `${user.username} disconnected.` });
+      io.to(user.channel).emit('system_message', { text: `${user.username} left the server.` });
+      const channel = user.channel;
       delete users[socket.id];
-      updateUserList(user.channel);
+      updateUserList(channel);
     }
   });
 
@@ -80,4 +99,3 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
-        
