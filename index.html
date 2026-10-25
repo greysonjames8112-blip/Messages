@@ -14,22 +14,26 @@
       -moz-user-select: none;
       -ms-user-select: none;
       user-select: none;
-      -webkit-tap-highlight-color: transparent; /* Removes mobile blue tap flash */
+      -webkit-tap-highlight-color: transparent;
     }
 
-    /* Use standard 100vh for mobile compatibility */
     html, body { height: 100vh; width: 100vw; overflow: hidden; background-color: #313338; color: #dbdee1; }
     #app { display: flex; height: 100vh; width: 100vw; overflow: hidden; }
     
+    /* Scrollable modal so virtual keyboards never block buttons */
     #auth-modal {
       position: fixed; top: 0; left: 0; right: 0; bottom: 0;
       background: rgba(0, 0, 0, 0.85); display: flex; justify-content: center; align-items: center; z-index: 9999;
+      overflow-y: auto; padding: 20px;
     }
-    .modal-box { background: #313338; padding: 32px; border-radius: 8px; width: 360px; text-align: center; border: 1px solid #1e1f22; z-index: 10000; }
+    .modal-box { 
+      background: #313338; padding: 24px; border-radius: 8px; width: 100%; max-width: 360px; 
+      text-align: center; border: 1px solid #1e1f22; margin: auto; z-index: 10000;
+    }
     .modal-box h2 { color: #f2f3f5; margin-bottom: 8px; }
     .modal-box p { color: #949ba4; font-size: 13px; margin-bottom: 16px; }
     .modal-box input {
-      width: 100%; padding: 14px; border-radius: 4px; border: 1px solid #1e1f22;
+      width: 100%; padding: 12px; border-radius: 4px; border: 1px solid #1e1f22;
       background: #1e1f22; color: #f2f3f5; font-size: 16px; margin-bottom: 12px; outline: none;
       -webkit-user-select: text; -moz-user-select: text; -ms-user-select: text; user-select: text;
     }
@@ -37,7 +41,7 @@
     .modal-box button {
       width: 100%; padding: 14px; background: #5865f2; border: none; border-radius: 4px;
       color: white; font-size: 16px; font-weight: bold; cursor: pointer; margin-bottom: 12px;
-      touch-action: manipulation; /* Removes mobile click delay */
+      touch-action: manipulation;
     }
     .modal-box button:active { background: #4752c4; }
     .switch-auth { color: #00a8fc; font-size: 14px; cursor: pointer; text-decoration: underline; margin-top: 8px; display: inline-block; touch-action: manipulation; }
@@ -146,7 +150,6 @@
         <input type="file" id="pfp-input" accept="image/*" style="color:#949ba4; font-size:13px; margin-bottom:12px;" />
       </div>
 
-      <!-- Explicit inline onclick triggers for mobile tap certainty -->
       <button type="button" id="auth-btn" onclick="submitAuth()">Log In</button>
       <div>
         <span class="switch-auth" id="switch-btn" onclick="toggleAuth()">Need an account? Register</span>
@@ -237,7 +240,6 @@
     socket.on('connect', () => document.getElementById('net-status').classList.add('online'));
     socket.on('disconnect', () => document.getElementById('net-status').classList.remove('online'));
 
-    // Global functions so mobile inline onclicks trigger instantly
     window.toggleAuth = function() {
       isRegister = !isRegister;
       document.getElementById('modal-title').innerText = isRegister ? 'Create Account' : 'Welcome Back';
@@ -430,4 +432,7 @@
       }
     });
 
-    socket.on('ice_candidate', async ({ candidate
+    socket.on('ice_candidate', async ({ candidate }) => {
+      try {
+        if (peerConnection) {
+          if (peerConnection.remoteDescription && peerCon
