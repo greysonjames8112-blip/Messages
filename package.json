@@ -1,7 +1,7 @@
 {
-  "name": "discord-clone-pro",
-  "version": "2.0.0",
-  "description": "Full-featured Discord clone with auth, persistence, DMs, and file sharing",
+  "name": "discord-clone-fix",
+  "version": "3.0.0",
+  "description": "Discord Clone Pro",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
