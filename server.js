@@ -8,12 +8,11 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: "*", methods: ["GET", "POST"] },
-  maxHttpBufferSize: 1e7 // Allow file/image uploads up to 10MB
+  maxHttpBufferSize: 1e7
 });
 
 app.use(express.json({ limit: '50mb' }));
 
-// Database file setup for persistence
 const DB_FILE = path.join(__dirname, 'db.json');
 function getDB() {
   try {
@@ -31,18 +30,18 @@ function saveDB(data) {
   try { fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2)); } catch (e) {}
 }
 
-// Serve the complete frontend HTML directly from this file
 app.get('/', (req, res) => {
   res.send(`<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Discord Clone</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: sans-serif; }
-    html, body { height: 100%; width: 100%; overflow: hidden; background-color: #313338; color: #dbdee1; }
-    #app { display: flex; height: 100vh; width: 100vw; }
+    /* Use 100dvh so mobile browser address bars never clip the bottom input bar */
+    html, body { height: 100dvh; width: 100vw; overflow: hidden; background-color: #313338; color: #dbdee1; }
+    #app { display: flex; height: 100dvh; width: 100vw; overflow: hidden; }
     
     #auth-modal {
       position: fixed; top: 0; left: 0; right: 0; bottom: 0;
@@ -67,15 +66,15 @@ app.get('/', (req, res) => {
     .server-icon { width: 48px; height: 48px; background: #5865f2; border-radius: 16px; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; }
 
     .channels-sidebar { width: 220px; background: #2b2d31; display: flex; flex-direction: column; flex-shrink: 0; }
-    .server-header { height: 48px; padding: 0 16px; border-bottom: 1px solid #1f2023; display: flex; align-items: center; font-weight: bold; color: #f2f3f5; }
-    .channel-list { padding: 12px 8px; flex: 1; overflow-y: auto; }
+    .server-header { height: 48px; padding: 0 16px; border-bottom: 1px solid #1f2023; display: flex; align-items: center; font-weight: bold; color: #f2f3f5; flex-shrink: 0; }
+    .channel-list { padding: 12px 8px; flex: 1; overflow-y: auto; min-height: 0; }
     .category { font-size: 11px; font-weight: bold; color: #949ba4; text-transform: uppercase; margin: 12px 0 6px 8px; }
     .channel-item { padding: 8px; border-radius: 4px; cursor: pointer; color: #949ba4; font-size: 14px; margin-bottom: 2px; }
     .channel-item:hover, .channel-item.active { background: #35373c; color: #f2f3f5; }
 
-    .chat-area { flex: 1; display: flex; flex-direction: column; background: #313338; height: 100%; min-width: 0; }
+    .chat-area { flex: 1; display: flex; flex-direction: column; background: #313338; min-width: 0; height: 100%; }
     .chat-header { height: 48px; border-bottom: 1px solid #202225; display: flex; align-items: center; padding: 0 16px; font-weight: bold; color: #f2f3f5; flex-shrink: 0; }
-    .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #fa777c; margin-right: 8px; }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #fa777c; margin-right: 8px; flex-shrink: 0; }
     .status-dot.online { background: #23a55a; }
 
     .messages-container { flex: 1; padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; min-height: 0; }
@@ -90,12 +89,13 @@ app.get('/', (req, res) => {
     .media-preview { max-width: 300px; max-height: 200px; border-radius: 6px; margin-top: 6px; display: block; }
     .file-attachment { background: #2b2d31; padding: 8px 12px; border-radius: 4px; display: inline-block; margin-top: 6px; color: #00a8fc; text-decoration: none; font-size: 13px; }
 
-    .input-area { padding: 0 16px 20px 16px; flex-shrink: 0; }
+    .input-area { padding: 12px 16px; flex-shrink: 0; background: #313338; }
     .input-form { background: #383a40; border-radius: 8px; padding: 8px 12px; display: flex; align-items: center; gap: 10px; }
     .file-btn { color: #b5bac1; cursor: pointer; font-size: 18px; font-weight: bold; }
     .input-form input[type="text"] { flex: 1; background: transparent; border: none; color: #f2f3f5; font-size: 14px; outline: none; }
 
-    .users-sidebar { width: 200px; background: #2b2d31; padding: 16px; flex-shrink: 0; overflow-y: auto; }
+    .users-sidebar { width: 180px; background: #2b2d31; padding: 16px; flex-shrink: 0; overflow-y: auto; display: none; }
+    @media(min-width: 768px) { .users-sidebar { display: block; } }
     .user-item { display: flex; align-items: center; gap: 8px; padding: 6px; color: #949ba4; font-size: 13px; cursor: pointer; border-radius: 4px; }
     .user-item:hover { background: #35373c; color: #f2f3f5; }
   </style>
@@ -119,7 +119,7 @@ app.get('/', (req, res) => {
   <div id="app">
     <div class="servers-bar"><div class="server-icon">D</div></div>
     <div class="channels-sidebar">
-      <div class="server-header" id="current-user-display">My Discord Server</div>
+      <div class="server-header" id="current-user-display">My Server</div>
       <div class="channel-list">
         <div class="category">Text Channels</div>
         <div class="channel-item active" onclick="switchChannel('general', this)"># general</div>
@@ -188,7 +188,7 @@ app.get('/', (req, res) => {
     function switchChannel(roomName, el) {
       if (!me) return;
       currentRoom = roomName;
-      const label = roomName.startsWith('dm_') ? \`DM: \${roomName.replace('dm_', '').replace(me, '').replace('_', '')}\` : \`# \${roomName}\`;
+      const label = roomName.startsWith('dm_') ? \`DM: \${roomName.replace('dm_', '').replace(me, '').replace(/_/g, '')}\` : \`# \${roomName}\`;
       document.getElementById('room-title').innerText = label;
       document.getElementById('msg-input').placeholder = \`Message \${label}\`;
       document.getElementById('messages-list').innerHTML = '';
@@ -292,7 +292,6 @@ app.get('/', (req, res) => {
 </html>`);
 });
 
-// Active sockets map
 const activeSockets = {};
 
 io.on('connection', (socket) => {
