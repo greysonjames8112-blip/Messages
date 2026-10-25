@@ -3,306 +3,121 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Discord Web Clone</title>
+  <title>Discord Clone Pro</title>
   <style>
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-      font-family: 'gg sans', 'Helvetica Neue', Helvetica, Arial, sans-serif;
-    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'gg sans', 'Helvetica Neue', Arial, sans-serif; }
+    body { display: flex; height: 100vh; background-color: #313338; color: #dbdee1; overflow: hidden; }
 
-    body {
-      display: flex;
-      height: 100vh;
-      background-color: #313338;
-      color: #dbdee1;
-      overflow: hidden;
+    /* Auth Modal */
+    #auth-modal {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0, 0, 0, 0.85); display: flex; justify-content: center; align-items: center; z-index: 1000;
     }
-
-    /* Modal */
-    #login-modal {
-      position: fixed;
-      top: 0; left: 0; width: 100%; height: 100%;
-      background: rgba(0, 0, 0, 0.85);
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      z-index: 1000;
-    }
-
-    .modal-box {
-      background: #313338;
-      padding: 32px;
-      border-radius: 8px;
-      width: 400px;
-      text-align: center;
-      box-shadow: 0 0 10px rgba(0,0,0,0.5);
-    }
-
+    .modal-box { background: #313338; padding: 32px; border-radius: 8px; width: 400px; text-align: center; box-shadow: 0 0 20px rgba(0,0,0,0.6); }
     .modal-box h2 { color: #f2f3f5; margin-bottom: 8px; }
     .modal-box p { color: #949ba4; font-size: 14px; margin-bottom: 20px; }
     .modal-box input {
-      width: 100%;
-      padding: 10px;
-      border-radius: 4px;
-      border: 1px solid #1e1f22;
-      background: #1e1f22;
-      color: #f2f3f5;
-      font-size: 16px;
-      margin-bottom: 20px;
-      outline: none;
+      width: 100%; padding: 10px; border-radius: 4px; border: 1px solid #1e1f22;
+      background: #1e1f22; color: #f2f3f5; font-size: 16px; margin-bottom: 15px; outline: none;
     }
-
     .modal-box button {
-      width: 100%;
-      padding: 12px;
-      background: #5865f2;
-      border: none;
-      border-radius: 4px;
-      color: white;
-      font-size: 16px;
-      font-weight: bold;
-      cursor: pointer;
+      width: 100%; padding: 12px; background: #5865f2; border: none; border-radius: 4px;
+      color: white; font-size: 16px; font-weight: bold; cursor: pointer; margin-bottom: 10px;
     }
-
     .modal-box button:hover { background: #4752c4; }
+    .switch-auth { color: #00a8fc; font-size: 13px; cursor: pointer; }
+    .error-msg { color: #fa777c; font-size: 13px; margin-bottom: 10px; }
 
     /* Layout */
-    .servers-bar {
-      width: 72px;
-      background-color: #1e1f22;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding-top: 12px;
-      gap: 8px;
-    }
-
+    .servers-bar { width: 72px; background-color: #1e1f22; display: flex; flex-direction: column; align-items: center; padding-top: 12px; gap: 8px; }
     .server-icon {
-      width: 48px;
-      height: 48px;
-      background-color: #313338;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: #dbdee1;
-      font-weight: bold;
-      cursor: pointer;
-      transition: all 0.2s;
+      width: 48px; height: 48px; background-color: #313338; border-radius: 50%; display: flex;
+      align-items: center; justify-content: center; color: #dbdee1; font-weight: bold; cursor: pointer; transition: 0.2s;
     }
+    .server-icon.active, .server-icon:hover { border-radius: 16px; background-color: #5865f2; color: white; }
 
-    .server-icon.active, .server-icon:hover {
-      border-radius: 16px;
-      background-color: #5865f2;
-      color: white;
-    }
+    .channels-sidebar { width: 240px; background-color: #2b2d31; display: flex; flex-direction: column; }
+    .server-header { height: 48px; padding: 0 16px; border-bottom: 1px solid #1f2023; display: flex; align-items: center; justify-content: space-between; font-weight: bold; color: #f2f3f5; }
+    .channel-list { padding: 16px 8px; flex: 1; overflow-y: auto; }
+    .channel-category { font-size: 12px; font-weight: bold; color: #949ba4; text-transform: uppercase; margin-bottom: 8px; padding-left: 8px; }
+    .channel-item { display: flex; align-items: center; padding: 6px 8px; border-radius: 4px; cursor: pointer; color: #949ba4; margin-bottom: 2px; }
+    .channel-item:hover, .channel-item.active { background-color: #35373c; color: #f2f3f5; }
 
-    .channels-sidebar {
-      width: 240px;
-      background-color: #2b2d31;
-      display: flex;
-      flex-direction: column;
-    }
+    .chat-area { flex: 1; display: flex; flex-direction: column; background-color: #313338; }
+    .chat-header { height: 48px; border-bottom: 1px solid #202225; display: flex; align-items: center; padding: 0 16px; font-weight: bold; color: #f2f3f5; }
+    .messages-container { flex: 1; padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; }
 
-    .server-header {
-      height: 48px;
-      padding: 0 16px;
-      border-bottom: 1px solid #1f2023;
-      display: flex;
-      align-items: center;
-      font-weight: bold;
-      color: #f2f3f5;
-    }
+    .message { display: flex; gap: 12px; }
+    .avatar { width: 40px; height: 40px; border-radius: 50%; background-color: #5865f2; display: flex; align-items: center; justify-content: center; font-weight: bold; color: white; flex-shrink: 0; }
+    .message-content { display: flex; flex-direction: column; max-width: 80%; }
+    .message-header { display: flex; align-items: baseline; gap: 8px; }
+    .username { font-weight: 500; color: #f2f3f5; font-size: 15px; }
+    .timestamp { font-size: 12px; color: #949ba4; }
+    .text { color: #dbdee1; font-size: 15px; margin-top: 4px; word-break: break-word; }
+    
+    /* Media Attachments */
+    .media-preview { margin-top: 8px; max-width: 350px; max-height: 250px; border-radius: 8px; display: block; }
+    .video-preview { max-width: 400px; max-height: 250px; border-radius: 8px; outline: none; }
+    .file-attachment { background: #2b2d31; padding: 10px; border-radius: 6px; display: inline-flex; align-items: center; gap: 10px; margin-top: 6px; text-decoration: none; color: #00a8fc; }
 
-    .channel-list {
-      padding: 16px 8px;
-      flex: 1;
-    }
+    .input-area { padding: 0 16px 24px 16px; }
+    .input-wrapper { background-color: #383a40; border-radius: 8px; padding: 10px 16px; display: flex; align-items: center; gap: 10px; }
+    .input-wrapper input { width: 100%; background: transparent; border: none; color: #f2f3f5; font-size: 15px; outline: none; }
+    .file-upload-btn { background: none; border: none; color: #b5bac1; font-size: 20px; cursor: pointer; }
+    .file-upload-btn:hover { color: #f2f3f5; }
 
-    .channel-category {
-      font-size: 12px;
-      font-weight: bold;
-      color: #949ba4;
-      text-transform: uppercase;
-      margin-bottom: 8px;
-      padding-left: 8px;
-    }
-
-    .channel-item {
-      display: flex;
-      align-items: center;
-      padding: 6px 8px;
-      border-radius: 4px;
-      cursor: pointer;
-      color: #949ba4;
-      margin-bottom: 2px;
-    }
-
-    .channel-item:hover, .channel-item.active {
-      background-color: #35373c;
-      color: #f2f3f5;
-    }
-
-    .chat-area {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      background-color: #313338;
-    }
-
-    .chat-header {
-      height: 48px;
-      border-bottom: 1px solid #202225;
-      display: flex;
-      align-items: center;
-      padding: 0 16px;
-      font-weight: bold;
-      color: #f2f3f5;
-    }
-
-    .messages-container {
-      flex: 1;
-      padding: 16px;
-      overflow-y: auto;
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
-
-    .message {
-      display: flex;
-      gap: 12px;
-    }
-
-    .avatar {
-      width: 40px;
-      height: 40px;
-      border-radius: 50%;
-      background-color: #5865f2;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: bold;
-      color: white;
-      flex-shrink: 0;
-    }
-
-    .message-content {
-      display: flex;
-      flex-direction: column;
-    }
-
-    .message-header {
-      display: flex;
-      align-items: baseline;
-      gap: 8px;
-    }
-
-    .username {
-      font-weight: 500;
-      color: #f2f3f5;
-      font-size: 15px;
-    }
-
-    .timestamp {
-      font-size: 12px;
-      color: #949ba4;
-    }
-
-    .text {
-      color: #dbdee1;
-      font-size: 15px;
-      margin-top: 4px;
-      word-break: break-word;
-    }
-
-    .system-msg {
-      font-style: italic;
-      color: #949ba4;
-      font-size: 13px;
-      text-align: center;
-      margin: 4px 0;
-    }
-
-    .input-area {
-      padding: 0 16px 24px 16px;
-    }
-
-    .input-wrapper {
-      background-color: #383a40;
-      border-radius: 8px;
-      padding: 12px 16px;
-    }
-
-    .input-wrapper input {
-      width: 100%;
-      background: transparent;
-      border: none;
-      color: #f2f3f5;
-      font-size: 15px;
-      outline: none;
-    }
-
-    .users-sidebar {
-      width: 240px;
-      background-color: #2b2d31;
-      padding: 16px;
-    }
-
-    .users-title {
-      font-size: 12px;
-      font-weight: bold;
-      color: #949ba4;
-      text-transform: uppercase;
-      margin-bottom: 12px;
-    }
-
-    .user-item {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 6px 0;
-      color: #949ba4;
-    }
+    .users-sidebar { width: 240px; background-color: #2b2d31; padding: 16px; overflow-y: auto; }
+    .users-title { font-size: 12px; font-weight: bold; color: #949ba4; text-transform: uppercase; margin-bottom: 12px; }
+    .user-item { display: flex; align-items: center; gap: 8px; padding: 6px 0; color: #949ba4; cursor: pointer; border-radius: 4px; }
+    .user-item:hover { color: #f2f3f5; background: #35373c; padding-left: 4px; }
   </style>
 </head>
 <body>
 
-  <!-- Login Modal -->
-  <div id="login-modal">
+  <!-- Auth Modal -->
+  <div id="auth-modal">
     <div class="modal-box">
-      <h2>Welcome!</h2>
-      <p>Enter a username to start chatting.</p>
-      <input type="text" id="username-input" placeholder="Username" maxlength="20" autofocus onkeypress="handleLoginKeyPress(event)" />
-      <button onclick="joinChat()">Join Chat</button>
+      <h2 id="modal-title">Welcome Back!</h2>
+      <p id="modal-desc">Log in to access your persistent chats and messages.</p>
+      <div id="error-container" class="error-msg"></div>
+      <input type="text" id="auth-username" placeholder="Username" maxlength="20" autofocus />
+      <input type="password" id="auth-password" placeholder="Password" />
+      <button id="auth-btn" onclick="handleAuth()">Log In</button>
+      <div class="switch-auth" onclick="toggleAuthMode()" id="switch-text">Need an account? Register</div>
     </div>
   </div>
 
   <!-- Servers Bar -->
   <div class="servers-bar">
-    <div class="server-icon active">D</div>
+    <div class="server-icon active" title="Public Server">D</div>
   </div>
 
   <!-- Channels Sidebar -->
   <div class="channels-sidebar">
-    <div class="server-header">My Discord Server</div>
+    <div class="server-header">
+      <span id="logged-user-display">Server</span>
+    </div>
     <div class="channel-list">
       <div class="channel-category">Text Channels</div>
-      <div class="channel-item active" onclick="switchChannel('general', this)"># general</div>
-      <div class="channel-item" onclick="switchChannel('random', this)"># random</div>
-      <div class="channel-item" onclick="switchChannel('gaming', this)"># gaming</div>
+      <div class="channel-item active" onclick="switchRoom('general', this)"># general</div>
+      <div class="channel-item" onclick="switchRoom('random', this)"># random</div>
+      <div class="channel-item" onclick="switchRoom('gaming', this)"># gaming</div>
+
+      <div class="channel-category" style="margin-top: 16px;">Direct Messages</div>
+      <div id="dm-list"></div>
     </div>
   </div>
 
   <!-- Main Chat Area -->
   <div class="chat-area">
-    <div class="chat-header" id="current-channel-title"># general</div>
+    <div class="chat-header" id="current-room-title"># general</div>
     <div class="messages-container" id="messages"></div>
     <div class="input-area">
       <div class="input-wrapper">
-        <input type="text" id="message-input" placeholder="Message #general" disabled onkeypress="handleKeyPress(event)" />
+        <label class="file-upload-btn" title="Upload Image, Video or File">
+          +<input type="file" id="file-input" style="display: none;" onchange="handleFileUpload(event)">
+        </label>
+        <input type="text" id="message-input" placeholder="Message #general" onkeypress="handleKeyPress(event)" />
       </div>
     </div>
   </div>
@@ -310,107 +125,178 @@
   <!-- Users Online Sidebar -->
   <div class="users-sidebar">
     <div class="users-title" id="online-count">Online — 0</div>
-    <div id="users-list"></div>
+    <div id="online-users-list"></div>
   </div>
 
-  <!-- Include Socket.io client script -->
   <script src="/socket.io/socket.io.js"></script>
   <script>
     const socket = io();
     let currentUsername = '';
-    let currentChannel = 'general';
+    let currentRoom = 'general';
+    let isRegisterMode = false;
+    let pendingFile = null;
 
-    function handleLoginKeyPress(e) {
-      if (e.key === 'Enter') {
-        joinChat();
+    function toggleAuthMode() {
+      isRegisterMode = !isRegisterMode;
+      document.getElementById('modal-title').innerText = isRegisterMode ? 'Create an Account' : 'Welcome Back!';
+      document.getElementById('modal-desc').innerText = isRegisterMode ? 'Sign up with a password to save your chats.' : 'Log in to access your persistent chats and messages.';
+      document.getElementById('auth-btn').innerText = isRegisterMode ? 'Register' : 'Log In';
+      document.getElementById('switch-text').innerText = isRegisterMode ? 'Already have an account? Log In' : "Need an account? Register";
+      document.getElementById('error-container').innerText = '';
+    }
+
+    function handleAuth() {
+      const username = document.getElementById('auth-username').value.trim();
+      const password = document.getElementById('auth-password').value;
+      if (!username || !password) {
+        document.getElementById('error-container').innerText = 'Please fill in both fields.';
+        return;
+      }
+
+      if (isRegisterMode) {
+        socket.emit('register', { username, password });
+      } else {
+        socket.emit('login', { username, password });
       }
     }
 
-    function joinChat() {
-      const input = document.getElementById('username-input');
-      const username = input.value.trim();
-      if (!username) return;
+    socket.on('auth_error', (err) => {
+      document.getElementById('error-container').innerText = err;
+    });
 
-      currentUsername = username;
-      document.getElementById('login-modal').style.display = 'none';
+    socket.on('auth_success', (data) => {
+      currentUsername = data.username;
+      document.getElementById('auth-modal').style.display = 'none';
+      document.getElementById('logged-user-display').innerText = currentUsername;
+      socket.emit('join_room', { room: currentRoom });
+    });
 
-      // Enable message input field
-      const msgInput = document.getElementById('message-input');
-      msgInput.disabled = false;
-      msgInput.focus();
-
-      socket.emit('join', { username: currentUsername, channel: currentChannel });
-    }
-
-    function switchChannel(channelName, element) {
-      if (channelName === currentChannel || !currentUsername) return;
-
-      currentChannel = channelName;
-      document.getElementById('current-channel-title').innerText = `# ${channelName}`;
-      document.getElementById('message-input').placeholder = `Message #${channelName}`;
+    function switchRoom(roomName, element) {
+      currentRoom = roomName;
+      document.getElementById('current-room-title').innerText = roomName.startsWith('dm_') ? `DM with ${roomName.replace('dm_', '').replace(currentUsername, '').replace('_', '')}` : `# ${roomName}`;
+      document.getElementById('message-input').placeholder = `Message ${document.getElementById('current-room-title').innerText}`;
       document.getElementById('messages').innerHTML = '';
 
       document.querySelectorAll('.channel-item').forEach(el => el.classList.remove('active'));
-      element.classList.add('active');
+      if (element) element.classList.add('active');
 
-      socket.emit('switch_channel', channelName);
+      socket.emit('join_room', { room: currentRoom });
+    }
+
+    function startDM(otherUser) {
+      if (otherUser === currentUsername) return;
+      // Create a deterministic sorted room name for 1-on-1 DMs
+      const users = [currentUsername, otherUser].sort();
+      const dmRoom = `dm_${users[0]}_${users[1]}`;
+      switchRoom(dmRoom, null);
+    }
+
+    function handleFileUpload(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        let fileType = 'file';
+        if (file.type.startsWith('image/')) fileType = 'image';
+        else if (file.type.startsWith('video/')) fileType = 'video';
+
+        pendingFile = {
+          fileData: e.target.result,
+          fileName: file.name,
+          fileType: fileType
+        };
+        document.getElementById('message-input').placeholder = `Attached: ${file.name} (Press Enter to send)`;
+      };
+      reader.readAsDataURL(file);
     }
 
     function handleKeyPress(e) {
       if (e.key === 'Enter') {
-        sendMessage();
+        const input = document.getElementById('message-input');
+        const text = input.value.trim();
+        if (text || pendingFile) {
+          socket.emit('send_message', {
+            room: currentRoom,
+            text: text,
+            fileData: pendingFile ? pendingFile.fileData : null,
+            fileName: pendingFile ? pendingFile.fileName : null,
+            fileType: pendingFile ? pendingFile.fileType : null
+          });
+          input.value = '';
+          pendingFile = null;
+          document.getElementById('message-input').placeholder = `Message ${document.getElementById('current-room-title').innerText}`;
+          document.getElementById('file-input').value = '';
+        }
       }
     }
 
-    function sendMessage() {
-      const input = document.getElementById('message-input');
-      const text = input.value.trim();
-      if (text && currentUsername) {
-        socket.emit('chat_message', { text });
-        input.value = '';
-      }
-    }
+    socket.on('message_history', (messages) => {
+      const container = document.getElementById('messages');
+      container.innerHTML = '';
+      messages.forEach(msg => appendMessage(msg));
+      container.scrollTop = container.scrollHeight;
+    });
 
-    // Socket Event Handlers
-    socket.on('chat_message', (data) => {
+    socket.on('chat_message', (msg) => {
+      appendMessage(msg);
+      const container = document.getElementById('messages');
+      container.scrollTop = container.scrollHeight;
+    });
+
+    function appendMessage(data) {
       const container = document.getElementById('messages');
       const msgElement = document.createElement('div');
       msgElement.className = 'message';
+
+      let mediaHTML = '';
+      if (data.fileData) {
+        if (data.fileType === 'image') {
+          mediaHTML = `<img src="${data.fileData}" class="media-preview" alt="Uploaded Image" />`;
+        } else if (data.fileType === 'video') {
+          mediaHTML = `<video src="${data.fileData}" controls class="video-preview"></video>`;
+        } else {
+          mediaHTML = `<a href="${data.fileData}" download="${data.fileName}" class="file-attachment">📎 ${escapeHTML(data.fileName)}</a>`;
+        }
+      }
+
       msgElement.innerHTML = `
-        <div class="avatar">${escapeHTML(data.user[0].toUpperCase())}</div>
+        <div class="avatar">${escapeHTML(data.sender[0].toUpperCase())}</div>
         <div class="message-content">
           <div class="message-header">
-            <span class="username">${escapeHTML(data.user)}</span>
+            <span class="username">${escapeHTML(data.sender)}</span>
             <span class="timestamp">${data.time}</span>
           </div>
           <div class="text">${escapeHTML(data.text)}</div>
+          ${mediaHTML}
         </div>
       `;
       container.appendChild(msgElement);
-      container.scrollTop = container.scrollHeight;
-    });
+    }
 
-    socket.on('system_message', (data) => {
-      const container = document.getElementById('messages');
-      const sysMsg = document.createElement('div');
-      sysMsg.className = 'system-msg';
-      sysMsg.innerText = data.text;
-      container.appendChild(sysMsg);
-      container.scrollTop = container.scrollHeight;
-    });
-
-    socket.on('user_list', (users) => {
+    socket.on('online_users', (users) => {
       document.getElementById('online-count').innerText = `Online — ${users.length}`;
-      const list = document.getElementById('users-list');
-      list.innerHTML = users.map(user => `
-        <div class="user-item">
+      
+      // Update online list
+      const onlineList = document.getElementById('online-users-list');
+      onlineList.innerHTML = users.map(user => `
+        <div class="user-item" onclick="startDM('${user}')">
           <div style="width: 8px; height: 8px; background-color: #23a55a; border-radius: 50%;"></div>
-          <span>${escapeHTML(user)}</span>
+          <span>${escapeHTML(user)} ${user === currentUsername ? '(You)' : ''}</span>
+        </div>
+      `).join('');
+
+      // Update DM sidebar list (show other online users as quick DM targets)
+      const dmList = document.getElementById('dm-list');
+      dmList.innerHTML = users.filter(u => u !== currentUsername).map(user => `
+        <div class="channel-item" onclick="startDM('${user}')">
+          💬 ${escapeHTML(user)}
         </div>
       `).join('');
     });
 
     function escapeHTML(str) {
+      if (!str) return '';
       return str.replace(/[&<>'"]/g, 
         tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
       );
