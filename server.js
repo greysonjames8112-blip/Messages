@@ -36,10 +36,9 @@ app.get('/', (req, res) => {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Discord Clone</title>
+  <title>Discord Clone with Calls</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: sans-serif; }
-    /* Use 100dvh so mobile browser address bars never clip the bottom input bar */
     html, body { height: 100dvh; width: 100vw; overflow: hidden; background-color: #313338; color: #dbdee1; }
     #app { display: flex; height: 100dvh; width: 100vw; overflow: hidden; }
     
@@ -66,16 +65,19 @@ app.get('/', (req, res) => {
     .server-icon { width: 48px; height: 48px; background: #5865f2; border-radius: 16px; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; }
 
     .channels-sidebar { width: 220px; background: #2b2d31; display: flex; flex-direction: column; flex-shrink: 0; }
-    .server-header { height: 48px; padding: 0 16px; border-bottom: 1px solid #1f2023; display: flex; align-items: center; font-weight: bold; color: #f2f3f5; flex-shrink: 0; }
+    .server-header { height: 48px; padding: 0 16px; border-bottom: 1px solid #1f2023; display: flex; align-items: center; justify-content: space-between; font-weight: bold; color: #f2f3f5; flex-shrink: 0; }
     .channel-list { padding: 12px 8px; flex: 1; overflow-y: auto; min-height: 0; }
     .category { font-size: 11px; font-weight: bold; color: #949ba4; text-transform: uppercase; margin: 12px 0 6px 8px; }
     .channel-item { padding: 8px; border-radius: 4px; cursor: pointer; color: #949ba4; font-size: 14px; margin-bottom: 2px; }
     .channel-item:hover, .channel-item.active { background: #35373c; color: #f2f3f5; }
 
     .chat-area { flex: 1; display: flex; flex-direction: column; background: #313338; min-width: 0; height: 100%; }
-    .chat-header { height: 48px; border-bottom: 1px solid #202225; display: flex; align-items: center; padding: 0 16px; font-weight: bold; color: #f2f3f5; flex-shrink: 0; }
-    .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #fa777c; margin-right: 8px; flex-shrink: 0; }
+    .chat-header { height: 48px; border-bottom: 1px solid #202225; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; font-weight: bold; color: #f2f3f5; flex-shrink: 0; }
+    .header-left { display: flex; align-items: center; gap: 8px; }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #fa777c; flex-shrink: 0; }
     .status-dot.online { background: #23a55a; }
+    .call-btn { background: #23a55a; border: none; color: white; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 13px; display: none; }
+    .call-btn:hover { background: #1f8a4c; }
 
     .messages-container { flex: 1; padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; min-height: 0; }
     .message { display: flex; gap: 12px; }
@@ -98,6 +100,17 @@ app.get('/', (req, res) => {
     @media(min-width: 768px) { .users-sidebar { display: block; } }
     .user-item { display: flex; align-items: center; gap: 8px; padding: 6px; color: #949ba4; font-size: 13px; cursor: pointer; border-radius: 4px; }
     .user-item:hover { background: #35373c; color: #f2f3f5; }
+
+    /* Video Call Overlay Modal */
+    #call-modal {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.9); display: none; flex-direction: column; justify-content: center; align-items: center; z-index: 10000;
+    }
+    .video-grid { display: flex; gap: 20px; margin-bottom: 20px; flex-wrap: wrap; justify-content: center; }
+    video { width: 400px; height: 300px; background: #1e1f22; border-radius: 8px; object-fit: cover; border: 2px solid #5865f2; }
+    .call-controls { display: flex; gap: 16px; }
+    .hangup-btn { background: #fa777c; color: white; border: none; padding: 10px 20px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 15px; }
+    .hangup-btn:hover { background: #d9534f; }
   </style>
 </head>
 <body>
@@ -105,7 +118,7 @@ app.get('/', (req, res) => {
   <div id="auth-modal">
     <div class="modal-box">
       <h2 id="modal-title">Welcome Back</h2>
-      <p id="modal-desc">Log in to start chatting.</p>
+      <p id="modal-desc">Log in to start chatting and calling.</p>
       <div id="auth-error" class="error-msg"></div>
       <form onsubmit="submitAuth(event)">
         <input type="text" id="auth-user" placeholder="Username" required autocomplete="off" />
@@ -113,6 +126,24 @@ app.get('/', (req, res) => {
         <button type="submit" id="auth-btn">Log In</button>
       </form>
       <div class="switch-auth" onclick="toggleAuth()" id="switch-btn">Need an account? Register</div>
+    </div>
+  </div>
+
+  <!-- Video Call Modal -->
+  <div id="call-modal">
+    <h3 id="call-status" style="color: white; margin-bottom: 20px;">Connecting Call...</h3>
+    <div class="video-grid">
+      <div>
+        <p style="color:#949ba4; font-size:12px; margin-bottom:4px;">You</p>
+        <video id="local-video" autoplay muted playsinline></video>
+      </div>
+      <div>
+        <p style="color:#949ba4; font-size:12px; margin-bottom:4px;">Friend</p>
+        <video id="remote-video" autoplay playsinline></video>
+      </div>
+    </div>
+    <div class="call-controls">
+      <button class="hangup-btn" onclick="endCall()">End Call</button>
     </div>
   </div>
 
@@ -132,8 +163,11 @@ app.get('/', (req, res) => {
 
     <div class="chat-area">
       <div class="chat-header">
-        <div class="status-dot" id="net-status"></div>
-        <span id="room-title"># general</span>
+        <div class="header-left">
+          <div class="status-dot" id="net-status"></div>
+          <span id="room-title"># general</span>
+        </div>
+        <button id="start-call-btn" class="call-btn" onclick="startVideoCall()">📹 Start Video Call</button>
       </div>
       <div class="messages-container" id="messages-list"></div>
       <div class="input-area">
@@ -157,6 +191,11 @@ app.get('/', (req, res) => {
     let currentRoom = 'general';
     let isRegister = false;
     let fileObj = null;
+
+    // WebRTC Globals
+    let peerConnection;
+    let localStream;
+    const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
     socket.on('connect', () => document.getElementById('net-status').classList.add('online'));
     socket.on('disconnect', () => document.getElementById('net-status').classList.remove('online'));
@@ -188,9 +227,15 @@ app.get('/', (req, res) => {
     function switchChannel(roomName, el) {
       if (!me) return;
       currentRoom = roomName;
-      const label = roomName.startsWith('dm_') ? \`DM: \${roomName.replace('dm_', '').replace(me, '').replace(/_/g, '')}\` : \`# \${roomName}\`;
+      const isDM = roomName.startsWith('dm_');
+      const label = isDM ? \`DM: \${roomName.replace('dm_', '').replace(me, '').replace(/_/g, '')}\` : \`# \${roomName}\`;
+      
       document.getElementById('room-title').innerText = label;
       document.getElementById('msg-input').placeholder = \`Message \${label}\`;
+      
+      // Show call button only inside Direct Messages (DMs)
+      document.getElementById('start-call-btn').style.display = isDM ? 'block' : 'none';
+
       document.getElementById('messages-list').innerHTML = '';
       document.querySelectorAll('.channel-item').forEach(c => c.classList.remove('active'));
       if (el) el.classList.add('active');
@@ -202,6 +247,95 @@ app.get('/', (req, res) => {
       const pair = [me, targetUser].sort();
       switchChannel(\`dm_\${pair[0]}_\${pair[1]}\`, null);
     }
+
+    // --- WebRTC Video Calling Logic ---
+    async function startVideoCall() {
+      document.getElementById('call-modal').style.display = 'flex';
+      document.getElementById('call-status').innerText = 'Calling...';
+
+      try {
+        localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        document.getElementById('local-video').srcObject = localStream;
+
+        createPeerConnection();
+        localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+
+        const offer = await peerConnection.createOffer();
+        await peerConnection.setLocalDescription(offer);
+
+        socket.emit('call_offer', { room: currentRoom, offer, sender: me });
+      } catch (err) {
+        alert('Could not access camera/microphone.');
+        endCall();
+      }
+    }
+
+    function createPeerConnection() {
+      peerConnection = new RTCPeerConnection(rtcConfig);
+
+      peerConnection.ontrack = (event) => {
+        document.getElementById('remote-video').srcObject = event.streams[0];
+        document.getElementById('call-status').innerText = 'Connected!';
+      };
+
+      peerConnection.onicecandidate = (event) => {
+        if (event.candidate) {
+          socket.emit('ice_candidate', { room: currentRoom, candidate: event.candidate });
+        }
+      };
+    }
+
+    socket.on('incoming_call', async ({ offer, sender }) => {
+      if (!confirm(\`Incoming video call from \${sender}. Accept?\`)) return;
+
+      document.getElementById('call-modal').style.display = 'flex';
+      document.getElementById('call-status').innerText = 'Connecting...';
+
+      try {
+        localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        document.getElementById('local-video').srcObject = localStream;
+
+        createPeerConnection();
+        localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+        const answer = await peerConnection.createAnswer();
+        await peerConnection.setLocalDescription(answer);
+
+        socket.emit('call_answer', { room: currentRoom, answer });
+      } catch (err) {
+        endCall();
+      }
+    });
+
+    socket.on('call_answered', async ({ answer }) => {
+      await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+      document.getElementById('call-status').innerText = 'Connected!';
+    });
+
+    socket.on('ice_candidate', async ({ candidate }) => {
+      if (peerConnection) {
+        await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+      }
+    });
+
+    function endCall() {
+      if (localStream) {
+        localStream.getTracks().forEach(track => track.stop());
+      }
+      if (peerConnection) {
+        peerConnection.close();
+      }
+      document.getElementById('call-modal').style.display = 'none';
+      document.getElementById('local-video').srcObject = null;
+      document.getElementById('remote-video').srcObject = null;
+      socket.emit('hangup', { room: currentRoom });
+    }
+
+    socket.on('hangup', () => {
+      endCall();
+    });
+    // ----------------------------------
 
     function attachFile(e) {
       const file = e.target.files[0];
@@ -311,49 +445,4 @@ io.on('connection', (socket) => {
     if (!username || !password) return socket.emit('auth_error', 'Fill in username and password.');
     const u = username.trim();
     const db = getDB();
-    if (!db.users[u] || db.users[u].password !== password) return socket.emit('auth_error', 'Invalid credentials.');
-    activeSockets[socket.id] = u;
-    socket.emit('auth_success', { username: u });
-    updateOnline();
-  });
-
-  socket.on('join_room', ({ room }) => {
-    socket.rooms.forEach(r => { if (r !== socket.id) socket.leave(r); });
-    socket.join(room);
-    const db = getDB();
-    socket.emit('message_history', (db.messages || []).filter(m => m.room === room));
-  });
-
-  socket.on('send_message', (data) => {
-    const sender = activeSockets[socket.id];
-    if (!sender) return;
-    const msgObj = {
-      id: Date.now().toString(),
-      sender,
-      room: data.room || 'general',
-      text: data.text || '',
-      fileData: data.fileData || null,
-      fileName: data.fileName || null,
-      fileType: data.fileType || null,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    };
-    const db = getDB();
-    if (!db.messages) db.messages = [];
-    db.messages.push(msgObj);
-    if (db.messages.length > 500) db.messages.shift();
-    saveDB(db);
-    io.to(msgObj.room).emit('chat_message', msgObj);
-  });
-
-  socket.on('disconnect', () => {
-    delete activeSockets[socket.id];
-    updateOnline();
-  });
-
-  function updateOnline() {
-    io.emit('online_users', [...new Set(Object.values(activeSockets))]);
-  }
-});
-
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Server live on port ${PORT}`));
+    if (!db.users[u] || db.users[u].password !== password) return socket.emit('auth_error', 'Invalid cr
