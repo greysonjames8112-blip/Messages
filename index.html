@@ -160,6 +160,7 @@
     let peerConnection = null;
     let localStream = null;
     let remoteStream = null;
+    let iceCandidateQueue = [];
     
     const rtcConfig = { 
       iceServers: [
@@ -218,7 +219,7 @@
       switchChannel(`dm_${pair[0]}_${pair[1]}`, null);
     }
 
-    // --- Robust WebRTC Mobile Calling Logic ---
+    // --- Bulletproof WebRTC Calling Logic with Queue ---
     async function startVideoCall() {
       document.getElementById('call-modal').style.display = 'flex';
       document.getElementById('call-status').innerText = 'Starting camera...';
@@ -245,8 +246,8 @@
         peerConnection.close();
       }
       peerConnection = new RTCPeerConnection(rtcConfig);
+      iceCandidateQueue = [];
 
-      // Create a dedicated MediaStream for mobile remote tracks
       remoteStream = new MediaStream();
       document.getElementById('remote-video').srcObject = remoteStream;
 
@@ -260,12 +261,6 @@
       peerConnection.onicecandidate = (event) => {
         if (event.candidate) {
           socket.emit('ice_candidate', { room: currentRoom, candidate: event.candidate });
-        }
-      };
-
-      peerConnection.onconnectionstatechange = () => {
-        if (peerConnection.connectionState === 'disconnected' || peerConnection.connectionState === 'failed') {
-          document.getElementById('call-status').innerText = 'Connection Dropped';
         }
       };
     }
@@ -284,6 +279,13 @@
         localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
         
         await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+        
+        // Flush any queued ICE candidates
+        while (iceCandidateQueue.length > 0) {
+          const candidate = iceCandidateQueue.shift();
+          await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+        }
+
         const answer = await peerConnection.createAnswer();
         await peerConnection.setLocalDescription(answer);
         
@@ -296,8 +298,15 @@
 
     socket.on('call_answered', async ({ answer }) => {
       try {
-        if (peerConnection && peerConnection.signalingState !== 'stable') {
+        if (peerConnection) {
           await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+          
+          // Flush any queued ICE candidates
+          while (iceCandidateQueue.length > 0) {
+            const candidate = iceCandidateQueue.shift();
+            await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+          }
+
           document.getElementById('call-status').innerText = 'Connected!';
         }
       } catch (e) {
@@ -307,8 +316,12 @@
 
     socket.on('ice_candidate', async ({ candidate }) => {
       try {
-        if (peerConnection && candidate) {
-          await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+        if (peerConnection) {
+          if (peerConnection.remoteDescription && peerConnection.remoteDescription.type) {
+            await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+          } else {
+            iceCandidateQueue.push(candidate);
+          }
         }
       } catch (e) {
         console.error(e);
@@ -324,6 +337,7 @@
         peerConnection.close();
         peerConnection = null;
       }
+      iceCandidateQueue = [];
       document.getElementById('call-modal').style.display = 'none';
       document.getElementById('local-video').srcObject = null;
       document.getElementById('remote-video').srcObject = null;
