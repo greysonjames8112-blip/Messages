@@ -20,7 +20,7 @@
       overflow: hidden;
     }
 
-    /* Modal Styling */
+    /* Modal */
     #login-modal {
       position: fixed;
       top: 0; left: 0; width: 100%; height: 100%;
@@ -46,11 +46,12 @@
       width: 100%;
       padding: 10px;
       border-radius: 4px;
-      border: none;
+      border: 1px solid #1e1f22;
       background: #1e1f22;
       color: #f2f3f5;
       font-size: 16px;
       margin-bottom: 20px;
+      outline: none;
     }
 
     .modal-box button {
@@ -67,7 +68,7 @@
 
     .modal-box button:hover { background: #4752c4; }
 
-    /* Discord Layout */
+    /* Layout */
     .servers-bar {
       width: 72px;
       background-color: #1e1f22;
@@ -113,7 +114,6 @@
       align-items: center;
       font-weight: bold;
       color: #f2f3f5;
-      box-shadow: 0 1px 2px rgba(0,0,0,0.2);
     }
 
     .channel-list {
@@ -273,9 +273,9 @@
   <!-- Login Modal -->
   <div id="login-modal">
     <div class="modal-box">
-      <h2>Welcome Back!</h2>
-      <p>Enter a display name to join the chat.</p>
-      <input type="text" id="username-input" placeholder="Username" maxlength="20" autofocus />
+      <h2>Welcome!</h2>
+      <p>Enter a username to start chatting.</p>
+      <input type="text" id="username-input" placeholder="Username" maxlength="20" autofocus onkeypress="handleLoginKeyPress(event)" />
       <button onclick="joinChat()">Join Chat</button>
     </div>
   </div>
@@ -302,7 +302,7 @@
     <div class="messages-container" id="messages"></div>
     <div class="input-area">
       <div class="input-wrapper">
-        <input type="text" id="message-input" placeholder="Message #general" onkeypress="handleKeyPress(event)" />
+        <input type="text" id="message-input" placeholder="Message #general" disabled onkeypress="handleKeyPress(event)" />
       </div>
     </div>
   </div>
@@ -313,11 +313,18 @@
     <div id="users-list"></div>
   </div>
 
+  <!-- Include Socket.io client script -->
   <script src="/socket.io/socket.io.js"></script>
   <script>
     const socket = io();
     let currentUsername = '';
     let currentChannel = 'general';
+
+    function handleLoginKeyPress(e) {
+      if (e.key === 'Enter') {
+        joinChat();
+      }
+    }
 
     function joinChat() {
       const input = document.getElementById('username-input');
@@ -327,11 +334,16 @@
       currentUsername = username;
       document.getElementById('login-modal').style.display = 'none';
 
+      // Enable message input field
+      const msgInput = document.getElementById('message-input');
+      msgInput.disabled = false;
+      msgInput.focus();
+
       socket.emit('join', { username: currentUsername, channel: currentChannel });
     }
 
     function switchChannel(channelName, element) {
-      if (channelName === currentChannel) return;
+      if (channelName === currentChannel || !currentUsername) return;
 
       currentChannel = channelName;
       document.getElementById('current-channel-title').innerText = `# ${channelName}`;
@@ -346,22 +358,26 @@
 
     function handleKeyPress(e) {
       if (e.key === 'Enter') {
-        const input = document.getElementById('message-input');
-        const text = input.value.trim();
-        if (text) {
-          socket.emit('chat_message', { text });
-          input.value = '';
-        }
+        sendMessage();
       }
     }
 
-    // Socket Event Listeners
+    function sendMessage() {
+      const input = document.getElementById('message-input');
+      const text = input.value.trim();
+      if (text && currentUsername) {
+        socket.emit('chat_message', { text });
+        input.value = '';
+      }
+    }
+
+    // Socket Event Handlers
     socket.on('chat_message', (data) => {
       const container = document.getElementById('messages');
       const msgElement = document.createElement('div');
       msgElement.className = 'message';
       msgElement.innerHTML = `
-        <div class="avatar">${data.user[0].toUpperCase()}</div>
+        <div class="avatar">${escapeHTML(data.user[0].toUpperCase())}</div>
         <div class="message-content">
           <div class="message-header">
             <span class="username">${escapeHTML(data.user)}</span>
