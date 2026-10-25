@@ -159,8 +159,8 @@
 
     let peerConnection = null;
     let localStream = null;
+    let remoteStream = null;
     
-    // Multiple public STUN servers for maximum connection reliability across mobile networks
     const rtcConfig = { 
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
@@ -218,7 +218,7 @@
       switchChannel(`dm_${pair[0]}_${pair[1]}`, null);
     }
 
-    // --- WebRTC Robust Calling Logic ---
+    // --- Robust WebRTC Mobile Calling Logic ---
     async function startVideoCall() {
       document.getElementById('call-modal').style.display = 'flex';
       document.getElementById('call-status').innerText = 'Starting camera...';
@@ -246,14 +246,26 @@
       }
       peerConnection = new RTCPeerConnection(rtcConfig);
 
+      // Create a dedicated MediaStream for mobile remote tracks
+      remoteStream = new MediaStream();
+      document.getElementById('remote-video').srcObject = remoteStream;
+
       peerConnection.ontrack = (event) => {
-        document.getElementById('remote-video').srcObject = event.streams[0];
+        event.streams[0].getTracks().forEach(track => {
+          remoteStream.addTrack(track);
+        });
         document.getElementById('call-status').innerText = 'Connected!';
       };
 
       peerConnection.onicecandidate = (event) => {
         if (event.candidate) {
           socket.emit('ice_candidate', { room: currentRoom, candidate: event.candidate });
+        }
+      };
+
+      peerConnection.onconnectionstatechange = () => {
+        if (peerConnection.connectionState === 'disconnected' || peerConnection.connectionState === 'failed') {
+          document.getElementById('call-status').innerText = 'Connection Dropped';
         }
       };
     }
