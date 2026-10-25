@@ -10,7 +10,6 @@
       margin: 0; 
       padding: 0; 
       font-family: sans-serif; 
-      /* Make entire UI unhighlightable by default */
       -webkit-user-select: none;
       -moz-user-select: none;
       -ms-user-select: none;
@@ -30,7 +29,6 @@
     .modal-box input {
       width: 100%; padding: 12px; border-radius: 4px; border: 1px solid #1e1f22;
       background: #1e1f22; color: #f2f3f5; font-size: 15px; margin-bottom: 12px; outline: none;
-      /* Allow text selection in input boxes so users can type and edit */
       -webkit-user-select: text; -moz-user-select: text; -ms-user-select: text; user-select: text;
     }
     .pfp-upload-label { display: block; color: #b5bac1; font-size: 13px; margin-bottom: 6px; text-align: left; }
@@ -71,7 +69,6 @@
     .username { font-weight: bold; color: #f2f3f5; font-size: 14px; }
     .time { font-size: 11px; color: #949ba4; }
     
-    /* ALLOW text highlighting ONLY inside sent message text */
     .text { 
       color: #dbdee1; 
       font-size: 14px; 
@@ -83,7 +80,6 @@
       user-select: text !important;
     }
 
-    /* Copy Button on Message Hover */
     .copy-btn {
       display: none;
       position: absolute;
@@ -146,8 +142,8 @@
         <input type="file" id="pfp-input" accept="image/*" style="color:#949ba4; font-size:13px; margin-bottom:12px;" />
       </div>
 
-      <button type="button" id="auth-btn" onclick="submitAuth()">Log In</button>
-      <div class="switch-auth" onclick="toggleAuth()" id="switch-btn">Need an account? Register</div>
+      <button type="button" id="auth-btn">Log In</button>
+      <div class="switch-auth" id="switch-btn">Need an account? Register</div>
     </div>
   </div>
 
@@ -165,7 +161,7 @@
       </div>
     </div>
     <div class="call-controls">
-      <button class="hangup-btn" onclick="endCall()">End Call</button>
+      <button class="hangup-btn" id="hangup-btn">End Call</button>
     </div>
   </div>
 
@@ -175,9 +171,9 @@
       <div class="server-header" id="current-user-display">My Server</div>
       <div class="channel-list">
         <div class="category">Text Channels</div>
-        <div class="channel-item active" onclick="switchChannel('general', this)"># general</div>
-        <div class="channel-item" onclick="switchChannel('random', this)"># random</div>
-        <div class="channel-item" onclick="switchChannel('gaming', this)"># gaming</div>
+        <div class="channel-item active" data-room="general"># general</div>
+        <div class="channel-item" data-room="random"># random</div>
+        <div class="channel-item" data-room="gaming"># gaming</div>
         <div class="category">Direct Messages</div>
         <div id="dm-list"></div>
       </div>
@@ -190,15 +186,15 @@
           <span id="room-title"># general</span>
         </div>
         <div id="call-btn-group" class="call-btn-group">
-          <button class="call-btn" onclick="startCall(true)">📹 Video Call</button>
-          <button class="call-btn" style="background:#5865f2;" onclick="startCall(false)">📞 Voice Call</button>
+          <button class="call-btn" id="video-call-btn">📹 Video Call</button>
+          <button class="call-btn" style="background:#5865f2;" id="voice-call-btn">📞 Voice Call</button>
         </div>
       </div>
       <div class="messages-container" id="messages-list"></div>
       <div class="input-area">
         <div class="input-box-wrapper">
-          <label class="file-btn" title="Upload Image, Video or File">+<input type="file" id="file-input" style="display:none" onchange="attachFile(event)"></label>
-          <input type="text" id="msg-input" placeholder="Message #general" autocomplete="off" onkeydown="handleEnter(event)" />
+          <label class="file-btn" title="Upload Image, Video or File">+<input type="file" id="file-input" style="display:none"></label>
+          <input type="text" id="msg-input" placeholder="Message #general" autocomplete="off" />
         </div>
       </div>
     </div>
@@ -234,14 +230,31 @@
     socket.on('connect', () => document.getElementById('net-status').classList.add('online'));
     socket.on('disconnect', () => document.getElementById('net-status').classList.remove('online'));
 
-    function toggleAuth() {
+    // Safe Event Listeners instead of inline onclicks to guarantee zero missing handlers
+    document.getElementById('switch-btn').addEventListener('click', () => {
       isRegister = !isRegister;
       document.getElementById('modal-title').innerText = isRegister ? 'Create Account' : 'Welcome Back';
       document.getElementById('auth-btn').innerText = isRegister ? 'Register' : 'Log In';
       document.getElementById('switch-btn').innerText = isRegister ? 'Already have an account? Log In' : 'Need an account? Register';
       document.getElementById('pfp-container').style.display = isRegister ? 'block' : 'none';
       document.getElementById('auth-error').innerText = '';
-    }
+    });
+
+    document.getElementById('auth-btn').addEventListener('click', submitAuth);
+    document.getElementById('hangup-btn').addEventListener('click', endCall);
+    document.getElementById('video-call-btn').addEventListener('click', () => startCall(true));
+    document.getElementById('voice-call-btn').addEventListener('click', () => startCall(false));
+
+    document.querySelectorAll('.channel-item[data-room]').forEach(item => {
+      item.addEventListener('click', (e) => {
+        switchChannel(item.getAttribute('data-room'), item);
+      });
+    });
+
+    document.getElementById('file-input').addEventListener('change', attachFile);
+    document.getElementById('msg-input').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') sendMessage();
+    });
 
     function submitAuth() {
       const username = document.getElementById('auth-user').value.trim();
@@ -428,17 +441,4 @@
       if (peerConnection) {
         peerConnection.close();
         peerConnection = null;
-      }
-      iceCandidateQueue = [];
-      document.getElementById('call-modal').style.display = 'none';
-      document.getElementById('local-video').srcObject = null;
-      document.getElementById('remote-video').srcObject = null;
-      document.getElementById('remote-audio').srcObject = null;
-      socket.emit('hangup', { room: currentRoom });
-    }
-
-    socket.on('hangup', () => { endCall(); });
-
-    function attachFile(e) {
-      const file = e.target.files[0];
-      if (!file) re
+  
