@@ -1,7 +1,7 @@
 {
-  "name": "discord-clone-fix",
-  "version": "3.0.0",
-  "description": "Discord Clone Pro",
+  "name": "discord-clone-single",
+  "version": "1.0.0",
+  "description": "Single-file Discord clone for Render",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
