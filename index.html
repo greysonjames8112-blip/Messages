@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Discord Web Clone</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'gg sans', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    }
+
+    body {
+      display: flex;
+      height: 100vh;
+      background-color: #313338;
+      color: #dbdee1;
+      overflow: hidden;
+    }
+
+    /* Modal Styling */
+    #login-modal {
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0, 0, 0, 0.85);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+    }
+
+    .modal-box {
+      background: #313338;
+      padding: 32px;
+      border-radius: 8px;
+      width: 400px;
+      text-align: center;
+      box-shadow: 0 0 10px rgba(0,0,0,0.5);
+    }
+
+    .modal-box h2 { color: #f2f3f5; margin-bottom: 8px; }
+    .modal-box p { color: #949ba4; font-size: 14px; margin-bottom: 20px; }
+    .modal-box input {
+      width: 100%;
+      padding: 10px;
+      border-radius: 4px;
+      border: none;
+      background: #1e1f22;
+      color: #f2f3f5;
+      font-size: 16px;
+      margin-bottom: 20px;
+    }
+
+    .modal-box button {
+      width: 100%;
+      padding: 12px;
+      background: #5865f2;
+      border: none;
+      border-radius: 4px;
+      color: white;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    .modal-box button:hover { background: #4752c4; }
+
+    /* Discord Layout */
+    .servers-bar {
+      width: 72px;
+      background-color: #1e1f22;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding-top: 12px;
+      gap: 8px;
+    }
+
+    .server-icon {
+      width: 48px;
+      height: 48px;
+      background-color: #313338;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #dbdee1;
+      font-weight: bold;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .server-icon.active, .server-icon:hover {
+      border-radius: 16px;
+      background-color: #5865f2;
+      color: white;
+    }
+
+    .channels-sidebar {
+      width: 240px;
+      background-color: #2b2d31;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .server-header {
+      height: 48px;
+      padding: 0 16px;
+      border-bottom: 1px solid #1f2023;
+      display: flex;
+      align-items: center;
+      font-weight: bold;
+      color: #f2f3f5;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+    }
+
+    .channel-list {
+      padding: 16px 8px;
+      flex: 1;
+    }
+
+    .channel-category {
+      font-size: 12px;
+      font-weight: bold;
+      color: #949ba4;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+      padding-left: 8px;
+    }
+
+    .channel-item {
+      display: flex;
+      align-items: center;
+      padding: 6px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      color: #949ba4;
+      margin-bottom: 2px;
+    }
+
+    .channel-item:hover, .channel-item.active {
+      background-color: #35373c;
+      color: #f2f3f5;
+    }
+
+    .chat-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background-color: #313338;
+    }
+
+    .chat-header {
+      height: 48px;
+      border-bottom: 1px solid #202225;
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      font-weight: bold;
+      color: #f2f3f5;
+    }
+
+    .messages-container {
+      flex: 1;
+      padding: 16px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .message {
+      display: flex;
+      gap: 12px;
+    }
+
+    .avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background-color: #5865f2;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      color: white;
+      flex-shrink: 0;
+    }
+
+    .message-content {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .message-header {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+    }
+
+    .username {
+      font-weight: 500;
+      color: #f2f3f5;
+      font-size: 15px;
+    }
+
+    .timestamp {
+      font-size: 12px;
+      color: #949ba4;
+    }
+
+    .text {
+      color: #dbdee1;
+      font-size: 15px;
+      margin-top: 4px;
+      word-break: break-word;
+    }
+
+    .system-msg {
+      font-style: italic;
+      color: #949ba4;
+      font-size: 13px;
+      text-align: center;
+      margin: 4px 0;
+    }
+
+    .input-area {
+      padding: 0 16px 24px 16px;
+    }
+
+    .input-wrapper {
+      background-color: #383a40;
+      border-radius: 8px;
+      padding: 12px 16px;
+    }
+
+    .input-wrapper input {
+      width: 100%;
+      background: transparent;
+      border: none;
+      color: #f2f3f5;
+      font-size: 15px;
+      outline: none;
+    }
+
+    .users-sidebar {
+      width: 240px;
+      background-color: #2b2d31;
+      padding: 16px;
+    }
+
+    .users-title {
+      font-size: 12px;
+      font-weight: bold;
+      color: #949ba4;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+
+    .user-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 0;
+      color: #949ba4;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Login Modal -->
+  <div id="login-modal">
+    <div class="modal-box">
+      <h2>Welcome Back!</h2>
+      <p>Enter a display name to join the chat.</p>
+      <input type="text" id="username-input" placeholder="Username" maxlength="20" autofocus />
+      <button onclick="joinChat()">Join Chat</button>
+    </div>
+  </div>
+
+  <!-- Servers Bar -->
+  <div class="servers-bar">
+    <div class="server-icon active">D</div>
+  </div>
+
+  <!-- Channels Sidebar -->
+  <div class="channels-sidebar">
+    <div class="server-header">My Discord Server</div>
+    <div class="channel-list">
+      <div class="channel-category">Text Channels</div>
+      <div class="channel-item active" onclick="switchChannel('general', this)"># general</div>
+      <div class="channel-item" onclick="switchChannel('random', this)"># random</div>
+      <div class="channel-item" onclick="switchChannel('gaming', this)"># gaming</div>
+    </div>
+  </div>
+
+  <!-- Main Chat Area -->
+  <div class="chat-area">
+    <div class="chat-header" id="current-channel-title"># general</div>
+    <div class="messages-container" id="messages"></div>
+    <div class="input-area">
+      <div class="input-wrapper">
+        <input type="text" id="message-input" placeholder="Message #general" onkeypress="handleKeyPress(event)" />
+      </div>
+    </div>
+  </div>
+
+  <!-- Users Online Sidebar -->
+  <div class="users-sidebar">
+    <div class="users-title" id="online-count">Online — 0</div>
+    <div id="users-list"></div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    let currentUsername = '';
+    let currentChannel = 'general';
+
+    function joinChat() {
+      const input = document.getElementById('username-input');
+      const username = input.value.trim();
+      if (!username) return;
+
+      currentUsername = username;
+      document.getElementById('login-modal').style.display = 'none';
+
+      socket.emit('join', { username: currentUsername, channel: currentChannel });
+    }
+
+    function switchChannel(channelName, element) {
+      if (channelName === currentChannel) return;
+
+      currentChannel = channelName;
+      document.getElementById('current-channel-title').innerText = `# ${channelName}`;
+      document.getElementById('message-input').placeholder = `Message #${channelName}`;
+      document.getElementById('messages').innerHTML = '';
+
+      document.querySelectorAll('.channel-item').forEach(el => el.classList.remove('active'));
+      element.classList.add('active');
+
+      socket.emit('switch_channel', channelName);
+    }
+
+    function handleKeyPress(e) {
+      if (e.key === 'Enter') {
+        const input = document.getElementById('message-input');
+        const text = input.value.trim();
+        if (text) {
+          socket.emit('chat_message', { text });
+          input.value = '';
+        }
+      }
+    }
+
+    // Socket Event Listeners
+    socket.on('chat_message', (data) => {
+      const container = document.getElementById('messages');
+      const msgElement = document.createElement('div');
+      msgElement.className = 'message';
+      msgElement.innerHTML = `
+        <div class="avatar">${data.user[0].toUpperCase()}</div>
+        <div class="message-content">
+          <div class="message-header">
+            <span class="username">${escapeHTML(data.user)}</span>
+            <span class="timestamp">${data.time}</span>
+          </div>
+          <div class="text">${escapeHTML(data.text)}</div>
+        </div>
+      `;
+      container.appendChild(msgElement);
+      container.scrollTop = container.scrollHeight;
+    });
+
+    socket.on('system_message', (data) => {
+      const container = document.getElementById('messages');
+      const sysMsg = document.createElement('div');
+      sysMsg.className = 'system-msg';
+      sysMsg.innerText = data.text;
+      container.appendChild(sysMsg);
+      container.scrollTop = container.scrollHeight;
+    });
+
+    socket.on('user_list', (users) => {
+      document.getElementById('online-count').innerText = `Online — ${users.length}`;
+      const list = document.getElementById('users-list');
+      list.innerHTML = users.map(user => `
+        <div class="user-item">
+          <div style="width: 8px; height: 8px; background-color: #23a55a; border-radius: 50%;"></div>
+          <span>${escapeHTML(user)}</span>
+        </div>
+      `).join('');
+    });
+
+    function escapeHTML(str) {
+      return str.replace(/[&<>'"]/g, 
+        tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
+      );
+    }
+  </script>
+</body>
+</html>
