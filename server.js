@@ -8,7 +8,7 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: "*", methods: ["GET", "POST"] },
-  maxHttpBufferSize: 1e7
+  maxHttpBufferSize: 2e7 // 20MB limit for profile pictures and files
 });
 
 app.use(express.static(path.join(__dirname)));
@@ -36,18 +36,20 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-const activeSockets = {};
+const activeSockets = {}; // socket.id -> { username, pfp }
 
 io.on('connection', (socket) => {
-  socket.on('register', ({ username, password }) => {
+  socket.on('register', ({ username, password, pfp }) => {
     if (!username || !password) return socket.emit('auth_error', 'Username and password required.');
     const u = username.trim();
     const db = getDB();
     if (db.users[u]) return socket.emit('auth_error', 'Username already taken.');
-    db.users[u] = { password };
+    
+    db.users[u] = { password, pfp: pfp || null };
     saveDB(db);
-    activeSockets[socket.id] = u;
-    socket.emit('auth_success', { username: u });
+    
+    activeSockets[socket.id] = { username: u, pfp: pfp || null };
+    socket.emit('auth_success', { username: u, pfp: pfp || null });
     updateOnline();
   });
 
@@ -56,8 +58,10 @@ io.on('connection', (socket) => {
     const u = username.trim();
     const db = getDB();
     if (!db.users[u] || db.users[u].password !== password) return socket.emit('auth_error', 'Invalid credentials.');
-    activeSockets[socket.id] = u;
-    socket.emit('auth_success', { username: u });
+    
+    const userPfp = db.users[u].pfp || null;
+    activeSockets[socket.id] = { username: u, pfp: userPfp };
+    socket.emit('auth_success', { username: u, pfp: userPfp });
     updateOnline();
   });
 
@@ -69,11 +73,12 @@ io.on('connection', (socket) => {
   });
 
   socket.on('send_message', (data) => {
-    const sender = activeSockets[socket.id];
-    if (!sender) return;
+    const userInfo = activeSockets[socket.id];
+    if (!userInfo) return;
     const msgObj = {
       id: Date.now().toString(),
-      sender,
+      sender: userInfo.username,
+      senderPfp: userInfo.pfp,
       room: data.room || 'general',
       text: data.text || '',
       fileData: data.fileData || null,
@@ -90,8 +95,8 @@ io.on('connection', (socket) => {
   });
 
   // WebRTC Signaling
-  socket.on('call_offer', ({ room, offer, sender }) => {
-    socket.to(room).emit('incoming_call', { offer, sender });
+  socket.on('call_offer', ({ room, offer, sender, isVideo }) => {
+    socket.to(room).emit('incoming_call', { offer, sender, isVideo });
   });
   socket.on('call_answer', ({ room, answer }) => {
     socket.to(room).emit('call_answered', { answer });
@@ -109,7 +114,10 @@ io.on('connection', (socket) => {
   });
 
   function updateOnline() {
-    io.emit('online_users', [...new Set(Object.values(activeSockets))]);
+    const usersList = Object.values(activeSockets).map(u => ({ username: u.username, pfp: u.pfp }));
+    // Deduplicate by username
+    const uniqueUsers = Array.from(new Map(usersList.map(item => [item.username, item])).values());
+    io.emit('online_users', uniqueUsers);
   }
 });
 
