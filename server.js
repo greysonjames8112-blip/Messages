@@ -2,96 +2,115 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
+const fs = require('fs');
 
 const app = express();
 const server = http.createServer(app);
-
-// Enable CORS for Socket.io
 const io = new Server(server, {
-  cors: {
-    origin: "*",
-    methods: ["GET", "POST"]
-  }
+  cors: { origin: "*", methods: ["GET", "POST"] }
 });
 
-// Serve static HTML/CSS/JS from current folder
 app.use(express.static(path.join(__dirname)));
+app.use(express.json({ limit: '50mb' })); // Allow large payloads for image/video uploads
 
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
-});
+// Database file path for persistence
+const DB_FILE = path.join(__dirname, 'db.json');
 
-// Store connected users
-const users = {};
+// Initialize database if it doesn't exist
+function loadDB() {
+  if (!fs.existsSync(DB_FILE)) {
+    const initialData = { users: {}, messages: [] };
+    fs.writeFileSync(DB_FILE, JSON.stringify(initialData, null, 2));
+  }
+  return JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+}
+
+function saveDB(data) {
+  fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
+}
+
+const activeSockets = {}; // socket.id -> username
 
 io.on('connection', (socket) => {
-  console.log('A user connected:', socket.id);
+  console.log('User connected:', socket.id);
 
-  // Handle user joining
-  socket.on('join', (data) => {
-    if (!data || !data.username) return;
-
-    const username = data.username.trim();
-    const channel = data.channel || 'general';
-
-    users[socket.id] = { username, channel };
-    socket.join(channel);
-    
-    // Send system message
-    io.to(channel).emit('system_message', {
-      text: `${username} joined #${channel}`
-    });
-
-    updateUserList(channel);
-  });
-
-  // Handle channel switching
-  socket.on('switch_channel', (newChannel) => {
-    if (!users[socket.id]) return;
-    const oldChannel = users[socket.id].channel;
-    
-    socket.leave(oldChannel);
-    users[socket.id].channel = newChannel;
-    socket.join(newChannel);
-
-    io.to(oldChannel).emit('system_message', { text: `${users[socket.id].username} left #${oldChannel}` });
-    io.to(newChannel).emit('system_message', { text: `${users[socket.id].username} joined #${newChannel}` });
-
-    updateUserList(oldChannel);
-    updateUserList(newChannel);
-  });
-
-  // Handle chat messages
-  socket.on('chat_message', (msgData) => {
-    const user = users[socket.id];
-    if (user && msgData && msgData.text) {
-      const trimmedText = msgData.text.trim();
-      if (trimmedText.length === 0) return;
-
-      io.to(user.channel).emit('chat_message', {
-        user: user.username,
-        text: trimmedText,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      });
+  // User Registration
+  socket.on('register', ({ username, password }) => {
+    const db = loadDB();
+    username = username.trim();
+    if (!username || !password) {
+      return socket.emit('auth_error', 'Username and password required.');
     }
+    if (db.users[username]) {
+      return socket.emit('auth_error', 'Username already taken.');
+    }
+
+    db.users[username] = { password };
+    saveDB(db);
+    socket.emit('auth_success', { username });
   });
 
-  // Handle disconnect
+  // User Login
+  socket.on('login', ({ username, password }) => {
+    const db = loadDB();
+    username = username.trim();
+    if (!db.users[username] || db.users[username].password !== password) {
+      return socket.emit('auth_error', 'Invalid username or password.');
+    }
+
+    activeSockets[socket.id] = username;
+    socket.emit('auth_success', { username });
+    updateGlobalOnlineUsers();
+  });
+
+  // Join Channel or DM Room
+  socket.on('join_room', ({ room }) => {
+    // Leave previous rooms except socket.id
+    for (const r of socket.rooms) {
+      if (r !== socket.id) socket.leave(r);
+    }
+    socket.join(room);
+
+    // Send message history for this room
+    const db = loadDB();
+    const roomMessages = db.messages.filter(m => m.room === room);
+    socket.emit('message_history', roomMessages);
+  });
+
+  // Handle Chat Message (Text or File/Image/Video)
+  socket.on('send_message', (data) => {
+    const username = activeSockets[socket.id];
+    if (!username) return;
+
+    const messageObj = {
+      id: Date.now().toString(),
+      sender: username,
+      room: data.room,
+      text: data.text || '',
+      fileData: data.fileData || null, // Base64 file/image/video
+      fileName: data.fileName || null,
+      fileType: data.fileType || null, // 'image', 'video', 'file'
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+
+    const db = loadDB();
+    db.messages.push(messageObj);
+    // Keep last 1000 messages to prevent infinite bloat
+    if (db.messages.length > 1000) db.messages.shift();
+    saveDB(db);
+
+    io.to(data.room).emit('chat_message', messageObj);
+  });
+
   socket.on('disconnect', () => {
-    const user = users[socket.id];
-    if (user) {
-      io.to(user.channel).emit('system_message', { text: `${user.username} left the server.` });
-      const channel = user.channel;
-      delete users[socket.id];
-      updateUserList(channel);
-    }
+    delete activeSockets[socket.id];
+    updateGlobalOnlineUsers();
+    console.log('User disconnected:', socket.id);
   });
 
-  function updateUserList(channel) {
-    const channelUsers = Object.values(users)
-      .filter(u => u.channel === channel)
-      .map(u => u.username);
-    io.to(channel).emit('user_list', channelUsers);
+  function updateGlobalOnlineUsers() {
+    const onlineUsers = [...new Set(Object.values(activeSockets))];
+    io.emit('online_users', onlineUsers);
   }
 });
 
@@ -99,3 +118,4 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
+  
