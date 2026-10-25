@@ -207,238 +207,221 @@
 
   <script src="/socket.io/socket.io.js"></script>
   <script>
-    const socket = io();
-    let me = '';
-    let myPfp = null;
-    let currentRoom = 'general';
-    let isRegister = false;
-    let fileObj = null;
+    // Wrap everything in DOMContentLoaded so buttons never fail to bind
+    document.addEventListener('DOMContentLoaded', () => {
+      const socket = io();
+      let me = '';
+      let myPfp = null;
+      let currentRoom = 'general';
+      let isRegister = false;
+      let fileObj = null;
 
-    let peerConnection = null;
-    let localStream = null;
-    let remoteStream = null;
-    let iceCandidateQueue = [];
+      let peerConnection = null;
+      let localStream = null;
+      let remoteStream = null;
+      let iceCandidateQueue = [];
 
-    const rtcConfig = { 
-      iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' },
-        { urls: 'stun:stun.ekiga.net' }
-      ] 
-    };
+      const rtcConfig = { 
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' },
+          { urls: 'stun:stun.ekiga.net' }
+        ] 
+      };
 
-    socket.on('connect', () => document.getElementById('net-status').classList.add('online'));
-    socket.on('disconnect', () => document.getElementById('net-status').classList.remove('online'));
+      socket.on('connect', () => document.getElementById('net-status').classList.add('online'));
+      socket.on('disconnect', () => document.getElementById('net-status').classList.remove('online'));
 
-    // Safe Event Listeners instead of inline onclicks to guarantee zero missing handlers
-    document.getElementById('switch-btn').addEventListener('click', () => {
-      isRegister = !isRegister;
-      document.getElementById('modal-title').innerText = isRegister ? 'Create Account' : 'Welcome Back';
-      document.getElementById('auth-btn').innerText = isRegister ? 'Register' : 'Log In';
-      document.getElementById('switch-btn').innerText = isRegister ? 'Already have an account? Log In' : 'Need an account? Register';
-      document.getElementById('pfp-container').style.display = isRegister ? 'block' : 'none';
-      document.getElementById('auth-error').innerText = '';
-    });
-
-    document.getElementById('auth-btn').addEventListener('click', submitAuth);
-    document.getElementById('hangup-btn').addEventListener('click', endCall);
-    document.getElementById('video-call-btn').addEventListener('click', () => startCall(true));
-    document.getElementById('voice-call-btn').addEventListener('click', () => startCall(false));
-
-    document.querySelectorAll('.channel-item[data-room]').forEach(item => {
-      item.addEventListener('click', (e) => {
-        switchChannel(item.getAttribute('data-room'), item);
+      document.getElementById('switch-btn').addEventListener('click', () => {
+        isRegister = !isRegister;
+        document.getElementById('modal-title').innerText = isRegister ? 'Create Account' : 'Welcome Back';
+        document.getElementById('auth-btn').innerText = isRegister ? 'Register' : 'Log In';
+        document.getElementById('switch-btn').innerText = isRegister ? 'Already have an account? Log In' : 'Need an account? Register';
+        document.getElementById('pfp-container').style.display = isRegister ? 'block' : 'none';
+        document.getElementById('auth-error').innerText = '';
       });
-    });
 
-    document.getElementById('file-input').addEventListener('change', attachFile);
-    document.getElementById('msg-input').addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') sendMessage();
-    });
+      document.getElementById('auth-btn').addEventListener('click', submitAuth);
+      document.getElementById('hangup-btn').addEventListener('click', endCall);
+      document.getElementById('video-call-btn').addEventListener('click', () => startCall(true));
+      document.getElementById('voice-call-btn').addEventListener('click', () => startCall(false));
 
-    function submitAuth() {
-      const username = document.getElementById('auth-user').value.trim();
-      const password = document.getElementById('auth-pass').value.trim();
-
-      if (!username || !password) {
-        document.getElementById('auth-error').innerText = 'Please fill out username and password.';
-        return;
-      }
-
-      if (isRegister) {
-        const pfpFile = document.getElementById('pfp-input').files[0];
-        if (pfpFile) {
-          const reader = new FileReader();
-          reader.onload = function(evt) {
-            myPfp = evt.target.result;
-            socket.emit('register', { username, password, pfp: myPfp });
-          };
-          reader.readAsDataURL(pfpFile);
-        } else {
-          socket.emit('register', { username, password, pfp: null });
-        }
-      } else {
-        socket.emit('login', { username, password });
-      }
-    }
-
-    socket.on('auth_error', (msg) => document.getElementById('auth-error').innerText = msg);
-    socket.on('auth_success', (data) => {
-      me = data.username;
-      myPfp = data.pfp;
-      document.getElementById('auth-modal').style.display = 'none';
-      
-      const headerDisplay = document.getElementById('current-user-display');
-      if (myPfp) {
-        headerDisplay.innerHTML = `<div style="display:flex; align-items:center; gap:8px;"><div class="avatar" style="width:28px;height:28px;"><img src="${myPfp}"></div><span>${me}</span></div>`;
-      } else {
-        headerDisplay.innerText = `👤 ${me}`;
-      }
-      socket.emit('join_room', { room: currentRoom });
-    });
-
-    function switchChannel(roomName, el) {
-      if (!me) return;
-      currentRoom = roomName;
-      const isDM = roomName.startsWith('dm_');
-      const label = isDM ? `DM: ${roomName.replace('dm_', '').replace(me, '').replace(/_/g, '')}` : `# ${roomName}`;
-      
-      document.getElementById('room-title').innerText = label;
-      document.getElementById('msg-input').placeholder = `Message ${label}`;
-      document.getElementById('call-btn-group').style.display = isDM ? 'flex' : 'none';
-
-      document.getElementById('messages-list').innerHTML = '';
-      document.querySelectorAll('.channel-item').forEach(c => c.classList.remove('active'));
-      if (el) el.classList.add('active');
-      socket.emit('join_room', { room: currentRoom });
-    }
-
-    function startDM(targetUser) {
-      if (targetUser === me) return;
-      const pair = [me, targetUser].sort();
-      switchChannel(`dm_${pair[0]}_${pair[1]}`, null);
-    }
-
-    async function startCall(isVideo) {
-      document.getElementById('call-modal').style.display = 'flex';
-      document.getElementById('call-status').innerText = isVideo ? 'Starting Video Call...' : 'Starting Voice Call...';
-      
-      try {
-        localStream = await navigator.mediaDevices.getUserMedia({ video: isVideo, audio: true });
-        const localVideo = document.getElementById('local-video');
-        localVideo.srcObject = localStream;
-        localVideo.style.display = isVideo ? 'block' : 'none';
-        
-        createPeerConnection();
-        localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
-        
-        const offer = await peerConnection.createOffer();
-        await peerConnection.setLocalDescription(offer);
-        
-        document.getElementById('call-status').innerText = 'Calling friend...';
-        socket.emit('call_offer', { room: currentRoom, offer, sender: me, isVideo });
-      } catch (err) {
-        alert('Camera/Microphone access denied or unavailable.');
-        endCall();
-      }
-    }
-
-    function createPeerConnection() {
-      if (peerConnection) peerConnection.close();
-      peerConnection = new RTCPeerConnection(rtcConfig);
-      iceCandidateQueue = [];
-
-      remoteStream = new MediaStream();
-      const remoteVideo = document.getElementById('remote-video');
-      const remoteAudio = document.getElementById('remote-audio');
-      remoteVideo.srcObject = remoteStream;
-      remoteAudio.srcObject = remoteStream;
-
-      peerConnection.ontrack = (event) => {
-        event.streams[0].getTracks().forEach(track => {
-          remoteStream.addTrack(track);
+      document.querySelectorAll('.channel-item[data-room]').forEach(item => {
+        item.addEventListener('click', () => {
+          switchChannel(item.getAttribute('data-room'), item);
         });
-        remoteVideo.play().catch(e => console.log(e));
-        document.getElementById('call-status').innerText = 'Connected!';
-      };
+      });
 
-      peerConnection.onicecandidate = (event) => {
-        if (event.candidate) {
-          socket.emit('ice_candidate', { room: currentRoom, candidate: event.candidate });
-        }
-      };
-    }
+      document.getElementById('file-input').addEventListener('change', attachFile);
+      document.getElementById('msg-input').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') sendMessage();
+      });
 
-    socket.on('incoming_call', async ({ offer, sender, isVideo }) => {
-      const callType = isVideo ? 'video call' : 'voice call';
-      if (!confirm(`Incoming ${callType} from ${sender}. Accept?`)) return;
-      
-      document.getElementById('call-modal').style.display = 'flex';
-      document.getElementById('call-status').innerText = 'Connecting...';
-      
-      try {
-        localStream = await navigator.mediaDevices.getUserMedia({ video: isVideo, audio: true });
-        const localVideo = document.getElementById('local-video');
-        localVideo.srcObject = localStream;
-        localVideo.style.display = isVideo ? 'block' : 'none';
+      function submitAuth() {
+        const username = document.getElementById('auth-user').value.trim();
+        const password = document.getElementById('auth-pass').value.trim();
 
-        createPeerConnection();
-        localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
-        
-        await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
-        
-        while (iceCandidateQueue.length > 0) {
-          const candidate = iceCandidateQueue.shift();
-          await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+        if (!username || !password) {
+          document.getElementById('auth-error').innerText = 'Please fill out username and password.';
+          return;
         }
 
-        const answer = await peerConnection.createAnswer();
-        await peerConnection.setLocalDescription(answer);
-        
-        socket.emit('call_answer', { room: currentRoom, answer });
-      } catch (err) {
-        alert('Could not start call media.');
-        endCall();
+        if (isRegister) {
+          const pfpFile = document.getElementById('pfp-input').files[0];
+          if (pfpFile) {
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+              myPfp = evt.target.result;
+              socket.emit('register', { username, password, pfp: myPfp });
+            };
+            reader.readAsDataURL(pfpFile);
+          } else {
+            socket.emit('register', { username, password, pfp: null });
+          }
+        } else {
+          socket.emit('login', { username, password });
+        }
       }
-    });
 
-    socket.on('call_answered', async ({ answer }) => {
-      try {
-        if (peerConnection) {
-          await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+      socket.on('auth_error', (msg) => document.getElementById('auth-error').innerText = msg);
+      socket.on('auth_success', (data) => {
+        me = data.username;
+        myPfp = data.pfp;
+        document.getElementById('auth-modal').style.display = 'none';
+        
+        const headerDisplay = document.getElementById('current-user-display');
+        if (myPfp) {
+          headerDisplay.innerHTML = `<div style="display:flex; align-items:center; gap:8px;"><div class="avatar" style="width:28px;height:28px;"><img src="${myPfp}"></div><span>${me}</span></div>`;
+        } else {
+          headerDisplay.innerText = `👤 ${me}`;
+        }
+        socket.emit('join_room', { room: currentRoom });
+      });
+
+      window.switchChannel = function(roomName, el) {
+        if (!me) return;
+        currentRoom = roomName;
+        const isDM = roomName.startsWith('dm_');
+        const label = isDM ? `DM: ${roomName.replace('dm_', '').replace(me, '').replace(/_/g, '')}` : `# ${roomName}`;
+        
+        document.getElementById('room-title').innerText = label;
+        document.getElementById('msg-input').placeholder = `Message ${label}`;
+        document.getElementById('call-btn-group').style.display = isDM ? 'flex' : 'none';
+
+        document.getElementById('messages-list').innerHTML = '';
+        document.querySelectorAll('.channel-item').forEach(c => c.classList.remove('active'));
+        if (el) el.classList.add('active');
+        socket.emit('join_room', { room: currentRoom });
+      };
+
+      window.startDM = function(targetUser) {
+        if (targetUser === me) return;
+        const pair = [me, targetUser].sort();
+        switchChannel(`dm_${pair[0]}_${pair[1]}`, null);
+      };
+
+      async function startCall(isVideo) {
+        document.getElementById('call-modal').style.display = 'flex';
+        document.getElementById('call-status').innerText = isVideo ? 'Starting Video Call...' : 'Starting Voice Call...';
+        
+        try {
+          localStream = await navigator.mediaDevices.getUserMedia({ video: isVideo, audio: true });
+          const localVideo = document.getElementById('local-video');
+          localVideo.srcObject = localStream;
+          localVideo.style.display = isVideo ? 'block' : 'none';
+          
+          createPeerConnection();
+          localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+          
+          const offer = await peerConnection.createOffer();
+          await peerConnection.setLocalDescription(offer);
+          
+          document.getElementById('call-status').innerText = 'Calling friend...';
+          socket.emit('call_offer', { room: currentRoom, offer, sender: me, isVideo });
+        } catch (err) {
+          alert('Camera/Microphone access denied or unavailable.');
+          endCall();
+        }
+      }
+
+      function createPeerConnection() {
+        if (peerConnection) peerConnection.close();
+        peerConnection = new RTCPeerConnection(rtcConfig);
+        iceCandidateQueue = [];
+
+        remoteStream = new MediaStream();
+        const remoteVideo = document.getElementById('remote-video');
+        const remoteAudio = document.getElementById('remote-audio');
+        remoteVideo.srcObject = remoteStream;
+        remoteAudio.srcObject = remoteStream;
+
+        peerConnection.ontrack = (event) => {
+          event.streams[0].getTracks().forEach(track => {
+            remoteStream.addTrack(track);
+          });
+          remoteVideo.play().catch(e => console.log(e));
+          document.getElementById('call-status').innerText = 'Connected!';
+        };
+
+        peerConnection.onicecandidate = (event) => {
+          if (event.candidate) {
+            socket.emit('ice_candidate', { room: currentRoom, candidate: event.candidate });
+          }
+        };
+      }
+
+      socket.on('incoming_call', async ({ offer, sender, isVideo }) => {
+        const callType = isVideo ? 'video call' : 'voice call';
+        if (!confirm(`Incoming ${callType} from ${sender}. Accept?`)) return;
+        
+        document.getElementById('call-modal').style.display = 'flex';
+        document.getElementById('call-status').innerText = 'Connecting...';
+        
+        try {
+          localStream = await navigator.mediaDevices.getUserMedia({ video: isVideo, audio: true });
+          const localVideo = document.getElementById('local-video');
+          localVideo.srcObject = localStream;
+          localVideo.style.display = isVideo ? 'block' : 'none';
+
+          createPeerConnection();
+          localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+          
+          await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
           
           while (iceCandidateQueue.length > 0) {
             const candidate = iceCandidateQueue.shift();
             await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
           }
 
-          document.getElementById('call-status').innerText = 'Connected!';
+          const answer = await peerConnection.createAnswer();
+          await peerConnection.setLocalDescription(answer);
+          
+          socket.emit('call_answer', { room: currentRoom, answer });
+        } catch (err) {
+          alert('Could not start call media.');
+          endCall();
         }
-      } catch (e) {
-        console.error(e);
-      }
-    });
+      });
 
-    socket.on('ice_candidate', async ({ candidate }) => {
-      try {
-        if (peerConnection) {
-          if (peerConnection.remoteDescription && peerConnection.remoteDescription.type) {
-            await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
-          } else {
-            iceCandidateQueue.push(candidate);
+      socket.on('call_answered', async ({ answer }) => {
+        try {
+          if (peerConnection) {
+            await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+            
+            while (iceCandidateQueue.length > 0) {
+              const candidate = iceCandidateQueue.shift();
+              await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+            }
+
+            document.getElementById('call-status').innerText = 'Connected!';
           }
+        } catch (e) {
+          console.error(e);
         }
-      } catch (e) {
-        console.error(e);
-      }
-    });
+      });
 
-    function endCall() {
-      if (localStream) {
-        localStream.getTracks().forEach(track => track.stop());
-        localStream = null;
-      }
-      if (peerConnection) {
-        peerConnection.close();
-        peerConnection = null;
-  
+      socket.on('ice_candidate', async ({ candidate }) => {
+        try {
+          if (peerConnection) {
+            if (peerConnection.remoteDescription && peerConnection.remoteDescription.type) {
+              await peerConnection.a
