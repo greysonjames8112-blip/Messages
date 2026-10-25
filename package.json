@@ -1,7 +1,7 @@
 {
-  "name": "discord-clone",
-  "version": "1.0.0",
-  "description": "A real-time chat application built with Node.js and Socket.io",
+  "name": "discord-clone-pro",
+  "version": "2.0.0",
+  "description": "Full-featured Discord clone with auth, persistence, DMs, and file sharing",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
