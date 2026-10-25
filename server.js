@@ -6,116 +6,125 @@ const fs = require('fs');
 
 const app = express();
 const server = http.createServer(app);
+
 const io = new Server(server, {
-  cors: { origin: "*", methods: ["GET", "POST"] }
+  cors: { origin: "*", methods: ["GET", "POST"] },
+  maxHttpBufferSize: 1e7 // Allow up to 10MB file uploads
 });
 
 app.use(express.static(path.join(__dirname)));
-app.use(express.json({ limit: '50mb' })); // Allow large payloads for image/video uploads
 
-// Database file path for persistence
+// File-based database path
 const DB_FILE = path.join(__dirname, 'db.json');
 
-// Initialize database if it doesn't exist
-function loadDB() {
-  if (!fs.existsSync(DB_FILE)) {
-    const initialData = { users: {}, messages: [] };
-    fs.writeFileSync(DB_FILE, JSON.stringify(initialData, null, 2));
+// Ensure db.json exists on start
+function getDB() {
+  try {
+    if (!fs.existsSync(DB_FILE)) {
+      const init = { users: {}, messages: [] };
+      fs.writeFileSync(DB_FILE, JSON.stringify(init, null, 2));
+      return init;
+    }
+    const content = fs.readFileSync(DB_FILE, 'utf8');
+    return JSON.parse(content || '{"users":{},"messages":[]}');
+  } catch (err) {
+    console.error("Error reading DB:", err);
+    return { users: {}, messages: [] };
   }
-  return JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
 }
 
 function saveDB(data) {
-  fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
+  try {
+    fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
+  } catch (err) {
+    console.error("Error saving DB:", err);
+  }
 }
 
 const activeSockets = {}; // socket.id -> username
 
 io.on('connection', (socket) => {
-  console.log('User connected:', socket.id);
+  console.log('Client connected:', socket.id);
 
-  // User Registration
+  // Register
   socket.on('register', ({ username, password }) => {
-    const db = loadDB();
-    username = username.trim();
-    if (!username || !password) {
-      return socket.emit('auth_error', 'Username and password required.');
-    }
-    if (db.users[username]) {
+    if (!username || !password) return socket.emit('auth_error', 'Username and password required.');
+    const u = username.trim();
+    const db = getDB();
+
+    if (db.users[u]) {
       return socket.emit('auth_error', 'Username already taken.');
     }
 
-    db.users[username] = { password };
+    db.users[u] = { password };
     saveDB(db);
-    socket.emit('auth_success', { username });
+    activeSockets[socket.id] = u;
+    socket.emit('auth_success', { username: u });
+    updateOnlineUsers();
   });
 
-  // User Login
+  // Login
   socket.on('login', ({ username, password }) => {
-    const db = loadDB();
-    username = username.trim();
-    if (!db.users[username] || db.users[username].password !== password) {
+    if (!username || !password) return socket.emit('auth_error', 'Fill in username and password.');
+    const u = username.trim();
+    const db = getDB();
+
+    if (!db.users[u] || db.users[u].password !== password) {
       return socket.emit('auth_error', 'Invalid username or password.');
     }
 
-    activeSockets[socket.id] = username;
-    socket.emit('auth_success', { username });
-    updateGlobalOnlineUsers();
+    activeSockets[socket.id] = u;
+    socket.emit('auth_success', { username: u });
+    updateOnlineUsers();
   });
 
-  // Join Channel or DM Room
+  // Room Join
   socket.on('join_room', ({ room }) => {
-    // Leave previous rooms except socket.id
-    for (const r of socket.rooms) {
+    socket.rooms.forEach(r => {
       if (r !== socket.id) socket.leave(r);
-    }
+    });
     socket.join(room);
 
-    // Send message history for this room
-    const db = loadDB();
-    const roomMessages = db.messages.filter(m => m.room === room);
-    socket.emit('message_history', roomMessages);
+    const db = getDB();
+    const history = (db.messages || []).filter(m => m.room === room);
+    socket.emit('message_history', history);
   });
 
-  // Handle Chat Message (Text or File/Image/Video)
+  // Send Message
   socket.on('send_message', (data) => {
-    const username = activeSockets[socket.id];
-    if (!username) return;
+    const sender = activeSockets[socket.id];
+    if (!sender) return socket.emit('chat_error', 'You are not logged in!');
 
-    const messageObj = {
+    const msgObj = {
       id: Date.now().toString(),
-      sender: username,
-      room: data.room,
+      sender,
+      room: data.room || 'general',
       text: data.text || '',
-      fileData: data.fileData || null, // Base64 file/image/video
+      fileData: data.fileData || null,
       fileName: data.fileName || null,
-      fileType: data.fileType || null, // 'image', 'video', 'file'
+      fileType: data.fileType || null,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
 
-    const db = loadDB();
-    db.messages.push(messageObj);
-    // Keep last 1000 messages to prevent infinite bloat
-    if (db.messages.length > 1000) db.messages.shift();
+    const db = getDB();
+    if (!db.messages) db.messages = [];
+    db.messages.push(msgObj);
+    if (db.messages.length > 500) db.messages.shift(); // Keep last 500
     saveDB(db);
 
-    io.to(data.room).emit('chat_message', messageObj);
+    io.to(msgObj.room).emit('chat_message', msgObj);
   });
 
   socket.on('disconnect', () => {
     delete activeSockets[socket.id];
-    updateGlobalOnlineUsers();
-    console.log('User disconnected:', socket.id);
+    updateOnlineUsers();
   });
 
-  function updateGlobalOnlineUsers() {
-    const onlineUsers = [...new Set(Object.values(activeSockets))];
-    io.emit('online_users', onlineUsers);
+  function updateOnlineUsers() {
+    const list = [...new Set(Object.values(activeSockets))];
+    io.emit('online_users', list);
   }
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
-  
+server.listen(PORT, () => console.log(`Server live on port ${PORT}`));
