@@ -219,7 +219,6 @@
       switchChannel(`dm_${pair[0]}_${pair[1]}`, null);
     }
 
-    // --- Bulletproof WebRTC Calling Logic with Queue ---
     async function startVideoCall() {
       document.getElementById('call-modal').style.display = 'flex';
       document.getElementById('call-status').innerText = 'Starting camera...';
@@ -252,9 +251,14 @@
       document.getElementById('remote-video').srcObject = remoteStream;
 
       peerConnection.ontrack = (event) => {
-        event.streams[0].getTracks().forEach(track => {
-          remoteStream.addTrack(track);
-        });
+        if (event.streams && event.streams[0]) {
+          document.getElementById('remote-video').srcObject = event.streams[0];
+        } else {
+          event.streams[0].getTracks().forEach(track => {
+            remoteStream.addTrack(track);
+          });
+        }
+        document.getElementById('remote-video').play().catch(e => console.log(e));
         document.getElementById('call-status').innerText = 'Connected!';
       };
 
@@ -280,7 +284,6 @@
         
         await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
         
-        // Flush any queued ICE candidates
         while (iceCandidateQueue.length > 0) {
           const candidate = iceCandidateQueue.shift();
           await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
@@ -301,7 +304,6 @@
         if (peerConnection) {
           await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
           
-          // Flush any queued ICE candidates
           while (iceCandidateQueue.length > 0) {
             const candidate = iceCandidateQueue.shift();
             await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
@@ -347,7 +349,6 @@
     socket.on('hangup', () => {
       endCall();
     });
-    // ----------------------------------
 
     function attachFile(e) {
       const file = e.target.files[0];
